@@ -6,7 +6,6 @@ pipeline {
         AWS_ACCOUNT_ID = '463651588282'
         PROJECT_NAME = 'ecs-demo'
         ECR_REPO = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}-app"
-        ECR_REPO_NAME = "${PROJECT_NAME}-app"
         IMAGE_TAG = "${BUILD_NUMBER}"
     }
 
@@ -40,10 +39,10 @@ pipeline {
                     echo "Checking ECR repository..."
 
                     aws ecr describe-repositories \
-                    --repository-names ${ECR_REPO_NAME} \
+                    --repository-names ${PROJECT_NAME}-app \
                     --region ${AWS_REGION} \
                     || aws ecr create-repository \
-                    --repository-name ${ECR_REPO_NAME} \
+                    --repository-name ${PROJECT_NAME}-app \
                     --region ${AWS_REGION}
 
                     echo "ECR repository is ready."
@@ -97,6 +96,25 @@ pipeline {
             }
         }
 
+        stage('Get Existing Target Group ARN') {
+            steps {
+                withCredentials([
+                    [$class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-creds']
+                ]) {
+                    sh '''
+                    echo "===== Target Group ARN ====="
+
+                    aws elbv2 describe-target-groups \
+                    --names ecs-demo-tg \
+                    --region ${AWS_REGION} \
+                    --query 'TargetGroups[0].TargetGroupArn' \
+                    --output text
+                    '''
+                }
+            }
+        }
+
         stage('Terraform Apply') {
             steps {
                 dir('terraform') {
@@ -110,6 +128,7 @@ pipeline {
                         export AWS_DEFAULT_REGION=${AWS_REGION}
 
                         terraform init
+
                         terraform apply -auto-approve
                         '''
                     }
@@ -136,7 +155,9 @@ pipeline {
 
         stage('Smoke Test') {
             steps {
-                sh 'echo "ECS Deployment Successful"'
+                sh '''
+                echo "ECS Deployment Successful"
+                '''
             }
         }
     }
