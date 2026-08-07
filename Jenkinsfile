@@ -1,5 +1,4 @@
 pipeline {
-
     agent any
 
     environment {
@@ -37,6 +36,8 @@ pipeline {
                     credentialsId: 'aws-creds']
                 ]) {
                     sh '''
+                    aws sts get-caller-identity
+
                     aws ecr get-login-password \
                     --region ${AWS_REGION} | \
                     docker login \
@@ -50,6 +51,26 @@ pipeline {
             }
         }
 
+        stage('Check AWS Credentials') {
+            steps {
+                withCredentials([
+                    [$class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-creds']
+                ]) {
+                    sh '''
+                    echo "===== AWS CLI ====="
+                    aws --version
+
+                    echo "===== Identity ====="
+                    aws sts get-caller-identity
+
+                    echo "===== Environment ====="
+                    env | grep AWS || true
+                    '''
+                }
+            }
+        }
+
         stage('Terraform Apply') {
             steps {
                 dir('terraform') {
@@ -58,6 +79,10 @@ pipeline {
                         credentialsId: 'aws-creds']
                     ]) {
                         sh '''
+                        export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+                        export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+                        export AWS_DEFAULT_REGION=${AWS_REGION}
+
                         terraform init
                         terraform apply -auto-approve
                         '''
@@ -85,26 +110,22 @@ pipeline {
 
         stage('Smoke Test') {
             steps {
-                sh '''
-                echo "ECS Deployment Successful"
-                '''
+                sh 'echo "ECS Deployment Successful"'
             }
         }
     }
 
     post {
         always {
-            sh '''
-            docker system prune -f || true
-            '''
+            sh 'docker system prune -f || true'
         }
 
         success {
-            echo "Deployment completed successfully"
+            echo 'Deployment completed successfully'
         }
 
         failure {
-            echo "Deployment failed - check logs"
+            echo 'Deployment failed - check logs'
         }
     }
 }
