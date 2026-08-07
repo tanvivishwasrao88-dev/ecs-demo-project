@@ -6,6 +6,7 @@ pipeline {
         AWS_ACCOUNT_ID = '463651588282'
         PROJECT_NAME = 'ecs-demo'
         ECR_REPO = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}-app"
+        ECR_REPO_NAME = "${PROJECT_NAME}-app"
         IMAGE_TAG = "${BUILD_NUMBER}"
     }
 
@@ -24,6 +25,53 @@ pipeline {
                     docker build \
                     -t ${ECR_REPO}:${IMAGE_TAG} \
                     -t ${ECR_REPO}:latest .
+                    '''
+                }
+            }
+        }
+
+        stage('Create ECR Repository') {
+            steps {
+                withCredentials([
+                    [$class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-creds']
+                ]) {
+                    sh '''
+                    echo "Checking ECR repository..."
+
+                    aws ecr describe-repositories \
+                    --repository-names ${ECR_REPO_NAME} \
+                    --region ${AWS_REGION} \
+                    || aws ecr create-repository \
+                    --repository-name ${ECR_REPO_NAME} \
+                    --region ${AWS_REGION}
+
+                    echo "ECR repository is ready."
+                    '''
+                }
+            }
+        }
+
+        stage('Push to ECR') {
+            steps {
+                withCredentials([
+                    [$class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-creds']
+                ]) {
+                    sh '''
+                    echo "===== AWS Identity ====="
+                    aws sts get-caller-identity
+
+                    echo "===== Docker Login ====="
+                    aws ecr get-login-password \
+                    --region ${AWS_REGION} | \
+                    docker login \
+                    --username AWS \
+                    --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+
+                    echo "===== Push Image ====="
+                    docker push ${ECR_REPO}:${IMAGE_TAG}
+                    docker push ${ECR_REPO}:latest
                     '''
                 }
             }
@@ -65,28 +113,6 @@ pipeline {
                         terraform apply -auto-approve
                         '''
                     }
-                }
-            }
-        }
-
-        stage('Push to ECR') {
-            steps {
-                withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-creds']
-                ]) {
-                    sh '''
-                    aws sts get-caller-identity
-
-                    aws ecr get-login-password \
-                    --region ${AWS_REGION} | \
-                    docker login \
-                    --username AWS \
-                    --password-stdin ${ECR_REPO}
-
-                    docker push ${ECR_REPO}:${IMAGE_TAG}
-                    docker push ${ECR_REPO}:latest
-                    '''
                 }
             }
         }
