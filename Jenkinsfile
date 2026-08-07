@@ -18,7 +18,6 @@ pipeline {
             }
         }
 
-
         stage('Build Docker Image') {
             steps {
                 dir('app') {
@@ -31,15 +30,12 @@ pipeline {
             }
         }
 
-
         stage('Push to ECR') {
             steps {
-
                 withCredentials([
                     [$class: 'AmazonWebServicesCredentialsBinding',
                     credentialsId: 'aws-creds']
                 ]) {
-
                     sh '''
                     aws ecr get-login-password \
                     --region ${AWS_REGION} | \
@@ -54,31 +50,38 @@ pipeline {
             }
         }
 
-
         stage('Terraform Apply') {
             steps {
                 dir('terraform') {
-                    sh '''
-                    terraform init
-                    terraform apply -auto-approve
-                    '''
+                    withCredentials([
+                        [$class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-creds']
+                    ]) {
+                        sh '''
+                        terraform init
+                        terraform apply -auto-approve
+                        '''
+                    }
                 }
             }
         }
 
-
         stage('Force New Deployment') {
             steps {
-                sh '''
-                aws ecs update-service \
-                --cluster ecs-demo-cluster \
-                --service ecs-demo-service \
-                --force-new-deployment \
-                --region ${AWS_REGION}
-                '''
+                withCredentials([
+                    [$class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-creds']
+                ]) {
+                    sh '''
+                    aws ecs update-service \
+                    --cluster ecs-demo-cluster \
+                    --service ecs-demo-service \
+                    --force-new-deployment \
+                    --region ${AWS_REGION}
+                    '''
+                }
             }
         }
-
 
         stage('Smoke Test') {
             steps {
@@ -87,12 +90,9 @@ pipeline {
                 '''
             }
         }
-
     }
 
-
     post {
-
         always {
             sh '''
             docker system prune -f || true
@@ -106,7 +106,5 @@ pipeline {
         failure {
             echo "Deployment failed - check logs"
         }
-
     }
-
 }
