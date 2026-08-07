@@ -2,9 +2,9 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION       = 'us-east-1'
+        AWS_REGION       = 'ap-south-1'
         PROJECT_NAME     = 'ecs-demo'
-        AWS_ACCOUNT_ID    = credentials('aws-account-id')       // Jenkins credential (secret text)
+        AWS_ACCOUNT_ID    = credentials('463651588282')       // Jenkins credential (secret text)
         ECR_REPO          = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}-app"
         IMAGE_TAG         = "${env.BUILD_NUMBER}"
     }
